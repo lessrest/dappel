@@ -30,6 +30,9 @@
 (defvar *ethereum-rpc-url* "https://mainnet.infura.io")
 (defvar *ethereum-accounts* nil)
 
+(defun dapp-token-address (gem)
+  (cdr gem))
+
 (defun seth-setup ()
   (setenv "ETH_RPC_URL" *ethereum-rpc-url*))
 
@@ -44,7 +47,7 @@
 (defun seth (command &rest args)
   (seth-setup)
   (with-temp-buffer
-    (apply #'call-process `("seth" nil t nil ,command ,@args))
+    (apply #'call-process `("seth" nil (t nil) nil ,command ,@args))
     (string-trim (buffer-string))))
 
 (defun seth-token-balance (address token)
@@ -62,6 +65,9 @@
       (seth "--from-wei" (hex-to-dec wei))
     (seth "--from-wei" wei)))
 
+(defun dapp-ether-to-wei (s)
+  (seth "--to-wei" (concat s " ether")))
+
 (defun token-balance (address token)
   (interactive
    (list (eth-pick-account)
@@ -69,8 +75,15 @@
   (let ((wei (hex-to-dec (seth-token-balance address token))))
     (insert (format-wei wei))))
 
+(defun dapp-insert-timestamp ()
+  (interactive)
+  (insert (format-time-string "%Y-%m-%d %H:%M:%S")))
+
 (defun token-ls ()
   (interactive)
+  (insert ";; Token balances at ")
+  (dapp-insert-timestamp)
+  (newline)
   (dolist (x (seth-accounts))
     (let ((address (car x)))
       (insert address "   " (seth "nonce" address) "  " (cdr x))
@@ -79,4 +92,42 @@
         (let ((balance (format-wei (seth-token-balance address (car token)))))
           (when (not (string-equal balance "0"))
             (insert "  " (symbol-name (car token)) "    " balance)
-            (newline)))))))
+            (newline))))))
+  (newline))
+
+(defun dapp-grok-token-balance-line ()
+  (save-excursion
+    (move-beginning-of-line nil)
+    (if (looking-at "^  \\([A-Z]+\\)    \\([0-9]+\\.[0-9]+$\\)")
+        (let ((token (intern (match-string 1)))
+              (amount (match-string 2)))
+          (re-search-backward "^\\(0x[0-9a-fA-F]\\{40\\}\\) ")
+          (list (match-string 1) token amount)))))
+
+(defun dapp-make-transfer-tx ()
+  (interactive)
+  (seq-let (src gem max-wad) (dapp-grok-token-balance-line)
+    (let* ((dst (read-string "Receiving address: "))
+           (wad (read-string
+                 (concat "Amount of " (symbol-name gem) ": ") max-wad))
+           (wei (dapp-ether-to-wei wad)))
+      (goto-char (point-max))
+      (insert
+       (if (eq gem 'ETH)
+           (seth "mktx" "-V" wei "-F" src dst)
+         (seth "mktx" "-V" wei "-F" src (dapp-token-address gem)
+               "transfer(address,uint256)" dst wei))))))
+
+(defvar dapp-font-lock-defaults
+  `((
+     (";.*$" . font-lock-comment-face)
+     ("\\<0x[0-9a-fA-F]\\{40\\}\\>" . font-lock-string-face)
+     (,(regexp-opt (mapcar
+                    (lambda (x) (symbol-name (car x))) *erc20-tokens*)
+                   'words) . font-lock-builtin-face))))
+
+(define-derived-mode dapp-mode fundamental-mode "Dapp"
+  "Dapp mode is a major mode for Ethereum dapp interactions"
+  (setq font-lock-defaults dapp-font-lock-defaults)
+  (setq comment-start ";")
+  (setq comment-end ""))
