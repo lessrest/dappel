@@ -164,7 +164,7 @@
                   (let ((tx-hash (match-string 1)))
                     (forward-line 1)
                     (unless (looking-at "^;; Included in block ")
-                      (let ((number (seth "receipt" tx-hash "blockNumber")))
+                      (let ((number (seth "receipt" "--async" tx-hash "blockNumber")))
                         (insert ";; Included in block " number ".\n")
                         (dapp-scan-accounts-for-tokens
                          (list src-cons dst-cons))
