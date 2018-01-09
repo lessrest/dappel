@@ -113,11 +113,10 @@
 
 (defun dapp-transfer (src dst gem wad)
   (let ((wei (dapp-ether-to-wei wad)))
-    (format "%S"
-     (if (eq gem 'ETH)
-         (seth "send" "--async" "-V" wei "-F" src dst)
-       (seth "send" "--async" "-F" src (gem-token-address gem)
-             "transfer(address,uint256)" dst wei)))))
+    (if (eq gem 'ETH)
+        (seth "send" "--async" "-V" wei "-F" src dst)
+      (seth "send" "--async" "-F" src (gem-token-address gem)
+            "transfer(address,uint256)" dst wei))))
 
 (defvar dapp-font-lock-defaults
   `((
